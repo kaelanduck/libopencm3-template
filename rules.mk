@@ -27,7 +27,6 @@
 # No support for stylecheck.
 # No support for BMP/texane/random flash methods, no plans either
 # No support for magically finding the library.
-# C++ hasn't been actually tested with this..... sorry bout that. ;)
 # Second expansion/secondary not set, add this if you need them.
 
 BUILD_DIR ?= bin
@@ -48,6 +47,7 @@ CC	= $(PREFIX)gcc
 LD	= $(PREFIX)gcc
 OBJCOPY	= $(PREFIX)objcopy
 OBJDUMP	= $(PREFIX)objdump
+SIZE = $(PREFIX)size
 OOCD	?= openocd
 
 OPENCM3_INC = $(OPENCM3_DIR)/include
@@ -55,7 +55,8 @@ OPENCM3_INC = $(OPENCM3_DIR)/include
 # Inclusion of library header files
 INCLUDES += $(patsubst %,-I%, . $(OPENCM3_INC) )
 
-OBJS = $(CFILES:%.c=$(BUILD_DIR)/%.o)
+OBJS_1 = $(CFILES:%.c=$(BUILD_DIR)/%.o) # substitute .c
+OBJS = $(OBJS_1:%.cpp=$(BUILD_DIR)/%.o) # substitute .cpp
 GENERATED_BINS = $(PROJECT).elf $(PROJECT).bin $(PROJECT).map $(PROJECT).list $(PROJECT).lss
 
 TGT_CPPFLAGS += -MD
@@ -91,11 +92,11 @@ LDLIBS += -l$(OPENCM3_LIB)
 endif
 # nosys is only in newer gcc-arm-embedded...
 #LDLIBS += -specs=nosys.specs
-LDLIBS += -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group
+LDLIBS += -Wl,--start-group -lc -lstdc++ -lgcc -lnosys -Wl,--end-group
 
 # Burn in legacy hell fortran modula pascal yacc idontevenwat
 .SUFFIXES:
-.SUFFIXES: .c .h .o .cxx .elf .bin .list .lss
+.SUFFIXES: .c .h .o .cpp .elf .bin .list .lss
 
 # Bad make, never *ever* try to get a file out of source control by yourself.
 %: %,v
@@ -124,7 +125,7 @@ $(BUILD_DIR)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(TGT_CFLAGS) $(CFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $@ -c $<
 
-$(BUILD_DIR)/%.o: %.cxx
+$(BUILD_DIR)/%.o: %.cpp
 	@printf "  CXX\t$<\n"
 	@mkdir -p $(dir $@)
 	$(Q)$(CC) $(TGT_CXXFLAGS) $(CXXFLAGS) $(TGT_CPPFLAGS) $(CPPFLAGS) -o $@ -c $<
@@ -136,6 +137,8 @@ $(PROJECT).elf: $(OBJS) $(LDSCRIPT) $(LIBDEPS)
 %.bin: %.elf
 	@printf "  OBJCOPY\t$@\n"
 	$(Q)$(OBJCOPY) -O binary  $< $@
+	@printf "\n  SIZE\t$<\n"
+	$(Q)$(SIZE) $<
 
 %.lss: %.elf
 	$(OBJDUMP) -h -S $< > $@
@@ -146,13 +149,13 @@ $(PROJECT).elf: $(OBJS) $(LDSCRIPT) $(LIBDEPS)
 %.flash: %.elf
 	@printf "  FLASH\t$<\n"
 ifeq (,$(OOCD_FILE))
-	$(Q)(echo "halt; program $(realpath $(*).elf) verify reset" | nc -4 localhost 4444 2>/dev/null) || \
+	$(Q)(echo "halt; program $(realpath $(*).elf) verify reset" | nc 127.0.0.1 4444 2>/dev/null) || \
 		$(OOCD) -f interface/$(OOCD_INTERFACE).cfg \
 		-f target/$(OOCD_TARGET).cfg \
 		-c "program $(realpath $(*).elf) verify reset exit" \
 		$(NULL)
 else
-	$(Q)(echo "halt; program $(realpath $(*).elf) verify reset" | nc -4 localhost 4444 2>/dev/null) || \
+	$(Q)(echo "halt; program $(realpath $(*).elf) verify reset" | nc 127.0.0.1 4444 2>/dev/null) || \
 		$(Q)$(OOCD) -f $(OOCD_FILE) \
 		-c "program $(realpath $(*).elf) verify reset exit" \
 		$(NULL)
