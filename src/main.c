@@ -2,10 +2,36 @@
 
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/gpio.h>
+#include <libopencm3/cm3/nvic.h>
 
-#define LED_GPIO_RCC RCC_GPIOA
-#define LED_GPIO_PORT GPIOA
-#define LED_GPIO_PIN GPIO1
+#include <FreeRTOS.h>
+#include <task.h>
+
+void setup_task(void *arg) {
+	(void)arg;
+
+	// startup some clocks
+	rcc_periph_clock_enable(RCC_GPIOA);
+
+	// flash an led
+	gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN, GPIO1);
+	while (1) { gpio_toggle(GPIOA, GPIO1); vTaskDelay(500); }
+
+	// wait for some initialisation sequence
+	//vTaskDelay(50);
+
+	// force usb reenumerate
+	//gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO12);
+	//gpio_clear(GPIOA, GPIO12);
+	//vTaskDelay(500);
+
+	// create all main tasks
+	//xTaskCreate(some_task_func, "some task", 512, NULL, 2, &handle);
+	//xTaskCreate(some_other_task, "another task", 512, NULL, 1, &handle2);
+
+	// delete the setup task
+	vTaskDelete(NULL);
+}
 
 int main(void) {
 	// set debug to swd
@@ -15,16 +41,22 @@ int main(void) {
 	rcc_clock_setup_in_hse_8mhz_out_72mhz();
 	rcc_set_usbpre(RCC_CFGR_USBPRE_PLL_CLK_DIV1_5);
 
-	// set up peripheral clock and set gpio for opendrain
-	rcc_periph_clock_enable(LED_GPIO_RCC);
-	gpio_set_mode(LED_GPIO_PORT, GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN, LED_GPIO_PIN);
+	// create the setup task at max priority
+	xTaskCreate(setup_task, "setup_task", 128, NULL, configMAX_PRIORITIES-1, NULL);
 
-	// loop forever
-	while (1) {
-		// toggle the led pin and wait a short time
-		gpio_toggle(LED_GPIO_PORT, LED_GPIO_PIN);
-		for (volatile int i=0; i<1000000; i++);
-	}
+	// start the scheduler
+	vTaskStartScheduler();
 
+	// never get here
 	return 0;
 }
+
+// FreeRTOS handler entrypoints, defined in freertos/port.c
+void vPortSVCHandler(void);
+void xPortPendSVHandler(void);
+void xPortSysTickHandler(void);
+
+// interrupt vectors needed by FreeRTOS
+void sys_tick_handler(void) {xPortSysTickHandler();}
+void sv_call_handler(void) {vPortSVCHandler();}
+void pend_sv_handler(void) {xPortPendSVHandler();}

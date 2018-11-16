@@ -2,9 +2,20 @@ PROJECT = myproject
 BUILD_DIR = build
 
 # source files
-CFILES = src/main.c
+CFILES = \
+src/main.c \
+freertos/croutine.c \
+freertos/event_groups.c \
+freertos/heap_3.c \
+freertos/list.c \
+freertos/port.c \
+freertos/queue.c \
+freertos/stream_buffer.c \
+freertos/tasks.c \
+freertos/timers.c 
 
-INCLUDES += -Iinclude
+
+INCLUDES += -Iinclude -Ifreertos/include
 
 # extra path to look for source files
 #VPATH += $(some shared dir)
